@@ -1,0 +1,330 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Task & Matters Management{% endblock %}</title>
+    <!-- ⚡ Apply saved theme BEFORE CSS loads — prevents any flash of wrong theme -->
+    <script>if(localStorage.getItem('theme')==='dark'){document.documentElement.setAttribute('data-theme','dark');}else{document.documentElement.removeAttribute('data-theme');}</script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{% static 'css/style.css' %}?v=17">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+</head>
+
+<body class="{% if request.user.is_authenticated %}{% if request.user.profile.is_admin %}is-admin{% elif request.user.profile.is_manager %}is-manager{% else %}is-member{% endif %}{% endif %}">
+    <div class="layout">
+        <!-- Backdrop overlay for mobile -->
+        <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
+
+        <!-- =====SIDEBAR -->
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-logo">
+                <img src="{% static 'images/logo.png' %}" alt="Logo" class="logo-icon">
+                <h2>Task And Matters</h2>
+                <button class="sidebar-close-btn" onclick="closeSidebar()" type="button" aria-label="Close menu">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <nav class="sidebar-nav">
+                <div class="sidebar-section">
+                    <div class="sidebar-section-title">Main</div>
+                    <a href="{% url 'dashboard' %}"
+                        class="sidebar-link {% if request.resolver_match.url_name == 'dashboard' %}active{% endif %}">
+                        <i class="fas fa-th-large"></i> Dashboard
+                    </a>
+                    <a href="{% url 'matter_list' %}"
+                        class="sidebar-link {% if 'matter' in request.resolver_match.url_name %}active{% endif %}">
+                        <i class="fas fa-briefcase"></i> Matters
+                    </a>
+                    <a href="{% url 'timeline' %}"
+                        class="sidebar-link {% if request.resolver_match.url_name == 'timeline' %}active{% endif %}">
+                        <i class="fas fa-stream"></i> Timeline
+                    </a>
+                    <a href="{% url 'task_list' %}"
+                        class="sidebar-link {% if 'task' in request.resolver_match.url_name %}active{% endif %}">
+                        <i class="fas fa-tasks"></i> Tasks
+                    </a>
+                    <a href="{% url 'reminder_list' %}"
+                        class="sidebar-link {% if 'reminder' in request.resolver_match.url_name %}active{% endif %}">
+                        <i class="fas fa-bell"></i> Reminders
+                    </a>
+                    <a href="{% url 'document_list' %}"
+                        class="sidebar-link {% if 'document' in request.resolver_match.url_name %}active{% endif %}">
+                        <i class="fas fa-file-alt"></i> Documents
+                    </a>
+                    <a href="{% url 'comment_list' %}"
+                        class="sidebar-link {% if request.resolver_match.url_name == 'comment_list' %}active{% endif %}">
+                        <i class="fas fa-comments"></i> Comments
+                    </a>
+                    <a href="{% url 'live_chat' %}"
+                        class="sidebar-link {% if 'chat' in request.resolver_match.url_name %}active{% endif %}">
+                        <i class="fas fa-comment-dots"></i> Live Chat
+                        <span class="live-chat-badge"><span class="live-pulse-dot"></span> Live</span>
+                    </a>
+                    <a href="{% url 'reports' %}"
+                        class="sidebar-link {% if request.resolver_match.url_name == 'reports' %}active{% endif %}">
+                        <i class="fas fa-chart-bar"></i> Reports
+                    </a>
+                </div>
+
+                {% if request.user.profile.is_admin %}
+                <div class="sidebar-section">
+                    <div class="sidebar-section-title">Administration</div>
+                    <a href="{% url 'user_list' %}"
+                        class="sidebar-link {% if 'user' in request.resolver_match.url_name %}active{% endif %}">
+                        <i class="fas fa-users-cog"></i> Users
+                    </a>
+                </div>
+                {% endif %}
+            </nav>
+        </aside>
+
+        <!-- ===== MAIN CONTENT ===== -->
+        <div class="main-content">
+            <!-- Topbar -->
+            <header class="topbar">
+                <div class="topbar-left">
+                    <button class="sidebar-toggle-btn" id="sidebarToggleBtn" onclick="toggleSidebar()" type="button" aria-label="Toggle navigation menu" title="Navigation menu">
+                        <span class="bar"></span>
+                        <span class="bar"></span>
+                        <span class="bar"></span>
+                    </button>
+                    <form class="topbar-search" action="{% url 'search' %}" method="GET">
+                        <i class="fas fa-search"></i>
+                        <input type="text" name="q" placeholder="Search matters, tasks..."
+                            value="{{ request.GET.q|default:'' }}">
+                    </form>
+                </div>
+                <div class="topbar-right">
+                    <a href="{% url 'notification_list' %}" class="topbar-btn" title="Notifications">
+                        <i class="fas fa-bell"></i>
+                        {% if unread_notifications %}
+                        <span class="notification-badge">{{ unread_notifications }}</span>
+                        {% endif %}
+                    </a>
+                    <div class="profile-dropdown">
+                        <button class="profile-btn" onclick="toggleDropdown()" type="button">
+                            <div class="profile-avatar">
+                                {{ request.user.username|first|upper }}
+                            </div>
+                            <div>
+                                <div class="profile-name">{{ request.user.username }}</div>
+                                <div class="profile-role">
+                                    {% if request.user.profile %}{{ request.user.profile.get_role_display }}{% endif %}
+                                </div>
+                            </div>
+                            <i class="fas fa-chevron-down" style="font-size: 10px; color: var(--text-light);"></i>
+                        </button>
+                        <div class="dropdown-menu" id="profileDropdown">
+                            <a href="{% url 'profile' %}" class="dropdown-item">
+                                <i class="fas fa-user"></i> Profile
+                            </a>
+                            <a href="{% url 'change_password' %}" class="dropdown-item">
+                                <i class="fas fa-key"></i> Change Password
+                            </a>
+                            <div class="dropdown-divider"></div>
+                            <button class="dropdown-item" id="themeToggleBtn" onclick="toggleTheme()" type="button" style="width:100%; text-align:left; cursor:pointer; background:none; border:none; font-family:inherit; font-size:13px;">
+                                <i class="fas fa-moon" id="themeIcon"></i>
+                                <span id="themeLabel">Dark Mode</span>
+                            </button>
+                            <div class="dropdown-divider"></div>
+                            <a href="{% url 'logout' %}" class="dropdown-item" style="color: var(--danger);">
+                                <i class="fas fa-sign-out-alt"></i> Log Out
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </header>
+
+            <!-- Page Content -->
+            <main class="page-content">
+                <!-- Flash Messages -->
+                {% if messages %}
+                {% for message in messages %}
+                <div class="alert alert-{{ message.tags }}">
+                    <i
+                        class="fas {% if message.tags == 'success' %}fa-check-circle{% elif message.tags == 'error' %}fa-exclamation-circle{% elif message.tags == 'warning' %}fa-exclamation-triangle{% else %}fa-info-circle{% endif %}"></i>
+                    {{ message }}
+                </div>
+                {% endfor %}
+                {% endif %}
+
+                {% block content %}{% endblock %}
+            </main>
+        </div>
+    </div>
+
+    <script>
+        // ---- Theme ----
+        // Sync the icon/label to match the current html[data-theme] state
+        function syncThemeUI() {
+            var dark = document.documentElement.getAttribute('data-theme') === 'dark';
+            document.getElementById('themeIcon').className = dark ? 'fas fa-sun' : 'fas fa-moon';
+            document.getElementById('themeLabel').textContent = dark ? 'Light Mode' : 'Dark Mode';
+        }
+
+        function toggleTheme() {
+            var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+            if (isDark) {
+                document.documentElement.removeAttribute('data-theme');
+                localStorage.setItem('theme', 'light');
+            } else {
+                document.documentElement.setAttribute('data-theme', 'dark');
+                localStorage.setItem('theme', 'dark');
+            }
+            syncThemeUI();
+        }
+
+        // Sync icon/label on page load (html[data-theme] already set by <head> script)
+        syncThemeUI();
+
+        // ---- Dropdown ----
+        function toggleDropdown() {
+            document.getElementById('profileDropdown').classList.toggle('show');
+        }
+        document.addEventListener('click', function (e) {
+            if (!e.target.closest('.profile-dropdown')) {
+                document.getElementById('profileDropdown').classList.remove('show');
+            }
+        });
+
+        // ---- Mobile Sidebar Drawer (3-button menu) ----
+        function toggleSidebar() {
+            var sidebar = document.getElementById('sidebar');
+            var overlay = document.getElementById('sidebarOverlay');
+            if (sidebar && overlay) {
+                var isOpen = sidebar.classList.toggle('open');
+                overlay.classList.toggle('active', isOpen);
+                document.body.classList.toggle('sidebar-open', isOpen);
+            }
+        }
+
+        function closeSidebar() {
+            var sidebar = document.getElementById('sidebar');
+            var overlay = document.getElementById('sidebarOverlay');
+            if (sidebar) sidebar.classList.remove('open');
+            if (overlay) overlay.classList.remove('active');
+            document.body.classList.remove('sidebar-open');
+        }
+
+        // Close drawer when a navigation link inside the sidebar is tapped on phone
+        document.querySelectorAll('.sidebar-link').forEach(function (link) {
+            link.addEventListener('click', function () {
+                if (window.innerWidth <= 991) {
+                    closeSidebar();
+                }
+            });
+        });
+
+        // Close drawer on Escape key
+        document.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape') {
+                closeSidebar();
+            }
+        });
+
+        // ============================================================
+        // ⚡ REAL-TIME BACKGROUND AUTO-SYNC (Optimized Heartbeat)
+        // ============================================================
+        (function() {
+            {% if request.user.is_authenticated %}
+            let currentSyncHash = null;
+            let isSyncing = false;
+            let lastUserActivity = Date.now();
+            const syncIntervalMs = 25000; // Check every 25 seconds instead of 6s to reduce serverless overhead
+
+            // Track user interaction to avoid reloading while the user is actively working
+            ['mousemove', 'keydown', 'scroll', 'touchstart'].forEach(function(evt) {
+                window.addEventListener(evt, function() { lastUserActivity = Date.now(); }, { passive: true });
+            });
+
+            // Pages that benefit from auto-refreshing their data view when team members make changes
+            const autoRefreshPaths = [
+                "{% url 'dashboard' %}",
+                "{% url 'task_list' %}",
+                "{% url 'matter_list' %}",
+                "{% url 'timeline' %}",
+                "{% url 'document_list' %}",
+                "{% url 'reminder_list' %}",
+                "{% url 'comment_list' %}",
+                "{% url 'reports' %}"
+            ];
+
+            const currentPath = window.location.pathname;
+            const isAutoRefreshPage = autoRefreshPaths.some(p => currentPath === p || (p !== '/' && currentPath.startsWith(p)));
+
+            // Never auto-refresh when the user is editing or actively filling out a form!
+            function isUserInteractingWithForm() {
+                const active = document.activeElement;
+                if (!active) return false;
+                const tag = active.tagName.toLowerCase();
+                return tag === 'input' || tag === 'textarea' || tag === 'select';
+            }
+
+            async function checkSyncState() {
+                // Skip sync completely if tab is hidden in background
+                if (isSyncing || document.hidden) return;
+                isSyncing = true;
+
+                try {
+                    const res = await fetch("{% url 'api_sync_state' %}", {
+                        headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                    });
+                    if (!res.ok) throw new Error('Sync check error');
+                    const data = await res.json();
+
+                    if (data.status === 'ok') {
+                        // 1. Update Notification Bell Badge in real-time
+                        const badgeEl = document.querySelector('.notification-badge');
+                        const bellBtn = document.querySelector('a[title="Notifications"]');
+                        if (data.unread_notifications > 0) {
+                            if (badgeEl) {
+                                badgeEl.textContent = data.unread_notifications;
+                            } else if (bellBtn) {
+                                const newBadge = document.createElement('span');
+                                newBadge.className = 'notification-badge';
+                                newBadge.textContent = data.unread_notifications;
+                                bellBtn.appendChild(newBadge);
+                            }
+                        } else if (badgeEl) {
+                            badgeEl.remove();
+                        }
+
+                        // 2. Detect if project data changed (new tasks, matters, comments, status changes)
+                        if (currentSyncHash === null) {
+                            currentSyncHash = data.state_hash;
+                        } else if (currentSyncHash !== data.state_hash) {
+                            currentSyncHash = data.state_hash;
+                            
+                            // Only auto-reload if the user is on a live view and has been idle for at least 8 seconds
+                            const isIdle = (Date.now() - lastUserActivity) > 8000;
+                            if (isAutoRefreshPage && !isUserInteractingWithForm() && isIdle) {
+                                window.location.reload();
+                            }
+                        }
+                    }
+                } catch (e) {
+                    // Fail silently on background network hiccup
+                } finally {
+                    isSyncing = false;
+                }
+            }
+
+            // Run initial check after 3 seconds, then recurring 25s interval
+            setTimeout(checkSyncState, 3000);
+            setInterval(checkSyncState, syncIntervalMs);
+
+            // Also check when tab regains focus
+            window.addEventListener('focus', function() {
+                if (!document.hidden) checkSyncState();
+            });
+            {% endif %}
+        })();
+    </script>
+</body>
+
+</html>

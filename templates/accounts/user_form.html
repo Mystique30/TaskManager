@@ -1,0 +1,45 @@
+{% extends 'base.html' %}
+{% block title %}{{ title }} — TaskMatters{% endblock %}
+{% block content %}
+<div class="breadcrumb"><a href="{% url 'user_list' %}">Users</a> <span>/</span> <span>{{ title }}</span></div>
+<div class="card" style="max-width: 520px;">
+    <div class="card-header">
+        <h3>{{ title }}</h3>
+    </div>
+    <div class="card-body">
+        <form method="POST">
+            {% csrf_token %}
+            {% if form.errors %}
+            <div class="alert alert-error">
+                <i class="fas fa-exclamation-circle"></i>
+                {% for error in form.non_field_errors %}<div>{{ error }}</div>{% endfor %}
+                {% for field in form %}
+                    {% for error in field.errors %}<div><strong>{{ field.label }}:</strong> {{ error }}</div>{% endfor %}
+                {% endfor %}
+            </div>
+            {% endif %}
+            {% for field in form %}
+            {% if field.html_name == 'new_password' %}
+            <div style="border-top: 1px solid var(--border); margin: 20px 0 16px; padding-top: 14px;">
+                <h4 style="margin: 0 0 4px; font-size: 14px; font-weight: 600; color: var(--text-primary);"><i class="fas fa-key" style="margin-right: 6px; color: var(--primary);"></i> Reset Password</h4>
+                <p style="font-size: 12px; color: var(--text-secondary); margin: 0 0 14px;">Optional: Leave these blank if you do not want to change this user's password.</p>
+            </div>
+            {% endif %}
+            <div class="form-group">
+                <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+                {{ field }}
+                {% if field.errors %}
+                <div style="color: var(--danger); font-size: 12px; margin-top: 4px;">
+                    {% for error in field.errors %}{{ error }}{% endfor %}
+                </div>
+                {% endif %}
+            </div>
+            {% endfor %}
+            <div class="flex gap-1 mt-2">
+                <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Save</button>
+                <a href="{% url 'user_list' %}" class="btn btn-outline">Cancel</a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
