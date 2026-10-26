@@ -163,10 +163,12 @@
         // Load initial room
         loadMessages(true);
 
-        // Start real-time polling every 2.5 seconds
+        // Start real-time polling every 4 seconds (pauses when tab is hidden)
         pollInterval = setInterval(() => {
-            loadMessages(false);
-        }, 2500);
+            if (!document.hidden) {
+                loadMessages(false);
+            }
+        }, 4000);
 
         // Auto-focus input
         const input = document.getElementById('chatInputText');
@@ -230,7 +232,7 @@
     }
 
     async function loadMessages(isInitial = false) {
-        if (isFetching) return;
+        if (isFetching || (!isInitial && document.hidden)) return;
         isFetching = true;
 
         const refreshIcon = document.getElementById('chatRefreshIcon');
