@@ -187,27 +187,25 @@ def dashboard_view(request):
     matters_qs = get_user_matters_qs(user)
     tasks_qs = get_user_tasks_qs(user)
 
-    # Counts for the 6 dashboard cards
-    active_matters = matters_qs.filter(status='active').count()
-    matters_due = matters_qs.filter(
-        due_date__lte=week_from_now,
-        due_date__gte=today,
-        status='active'
-    ).count()
-    overdue_matters = matters_qs.filter(
-        due_date__lt=today,
-        status='active'
-    ).count()
-    overdue_tasks = tasks_qs.filter(
-        due_date__lt=today
-    ).exclude(status='completed').count()
-    upcoming_tasks = tasks_qs.filter(
-        due_date__gte=today,
-        due_date__lte=week_from_now
-    ).exclude(status='completed').count()
-    personal_tasks = tasks_qs.filter(
-        assigned_to=user
-    ).exclude(status='completed').count()
+    # Aggregate matter counts in 1 single query instead of 3
+    matter_counts = matters_qs.aggregate(
+        active=Count('id', filter=Q(status='active')),
+        due=Count('id', filter=Q(due_date__lte=week_from_now, due_date__gte=today, status='active')),
+        overdue=Count('id', filter=Q(due_date__lt=today, status='active')),
+    )
+    active_matters = matter_counts['active']
+    matters_due = matter_counts['due']
+    overdue_matters = matter_counts['overdue']
+
+    # Aggregate task counts in 1 single query instead of 3
+    task_counts = tasks_qs.aggregate(
+        overdue=Count('id', filter=Q(due_date__lt=today) & ~Q(status='completed')),
+        upcoming=Count('id', filter=Q(due_date__gte=today, due_date__lte=week_from_now) & ~Q(status='completed')),
+        personal=Count('id', filter=Q(assigned_to=user) & ~Q(status='completed')),
+    )
+    overdue_tasks = task_counts['overdue']
+    upcoming_tasks = task_counts['upcoming']
+    personal_tasks = task_counts['personal']
 
     # Lists for dashboard cards with prefetch_related for M2M assignees to eliminate N+1 queries
     active_matters_list = matters_qs.filter(
@@ -233,8 +231,10 @@ def dashboard_view(request):
     if not profile or profile.is_admin:
         recent_updates = TimelineEntry.objects.select_related('user', 'matter', 'task')[:10]
     else:
+        user_matter_ids = list(matters_qs.values_list('id', flat=True)[:100])
+        user_task_ids = list(tasks_qs.values_list('id', flat=True)[:100])
         recent_updates = TimelineEntry.objects.filter(
-            Q(task__in=tasks_qs) | Q(matter__in=matters_qs) | Q(user=user)
+            Q(task_id__in=user_task_ids) | Q(matter_id__in=user_matter_ids) | Q(user=user)
         ).distinct().select_related('user', 'matter', 'task')[:10]
 
     # Upcoming tasks list
@@ -879,7 +879,12 @@ def comment_list_view(request):
 @login_required_custom
 def reminder_list_view(request):
     """List reminders scoped by user role, strictly deduplicated."""
-    sync_due_date_reminders(request.user)
+    import time as pytime
+    last_sync = request.session.get('last_reminder_sync_ts', 0)
+    if pytime.time() - last_sync > 900:
+        sync_due_date_reminders()
+        request.session['last_reminder_sync_ts'] = pytime.time()
+
     profile = getattr(request.user, 'profile', None)
     is_admin = profile and profile.is_admin
 
@@ -1205,17 +1210,19 @@ def chat_api_messages(request):
         # Channel room
         qs = ChatMessage.objects.filter(room=room, recipient__isnull=True)
 
+    # Prefetch relations to prevent 200+ queries when looping messages
+    qs = qs.select_related('sender', 'sender__profile', 'matter', 'task')
+
     if since_id:
         try:
             qs = qs.filter(id__gt=int(since_id)).order_by('created_at')
         except ValueError:
             qs = qs.order_by('created_at')
     else:
-        # Fetch last 60 messages in chronological order
+        # Fetch last 50 messages in chronological order
         count = qs.count()
-        if count > 60:
-            qs = qs.order_by('-id')[:60]
-            qs = reversed(list(qs))
+        if count > 50:
+            qs = reversed(list(qs.order_by('-id')[:50]))
         else:
             qs = qs.order_by('created_at')
 
